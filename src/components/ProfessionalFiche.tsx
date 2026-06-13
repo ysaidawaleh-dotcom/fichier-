@@ -174,6 +174,18 @@ export default function ProfessionalFiche({ intervention, onPrint }: Professiona
           </p>
         </div>
 
+        {/* Notes rapides / observations contextuelles */}
+        {intervention.quickNotes && (
+          <div className="my-6 border border-teal-100 bg-teal-50/25 rounded-lg p-3.5 print:bg-transparent print:border-slate-300">
+            <div className="text-xs font-bold uppercase tracking-wide text-teal-800 print:text-slate-800 mb-2 border-b border-teal-100 print:border-slate-200 pb-1 font-sans">
+              Notes rapides & Observations contextuelles
+            </div>
+            <p className="text-xs text-slate-600 print:text-slate-700 whitespace-pre-wrap italic font-sans leading-normal">
+              {intervention.quickNotes}
+            </p>
+          </div>
+        )}
+
         {/* Itemized Tasks accomplished */}
         <div className="my-6">
           <div className="text-xs font-bold uppercase tracking-wide text-slate-700 mb-2.5 border-b border-slate-100 pb-1">
@@ -231,7 +243,7 @@ export default function ProfessionalFiche({ intervention, onPrint }: Professiona
             </div>
             <div className="border-t border-slate-200 pt-1.5 text-slate-500 text-[10px] flex justify-between">
               <span>Date : {new Date().toLocaleDateString('fr-FR')}</span>
-              <span className="italic">Signature & Tampon</span>
+              <span className="italic">Signature</span>
             </div>
           </div>
 

@@ -13,23 +13,12 @@ import InterventionsRegistry from "./components/InterventionsRegistry";
 import ProfessionalFiche from "./components/ProfessionalFiche";
 import SettingsProfile from "./components/SettingsProfile";
 import { 
-  Building, 
-  Cpu, 
-  Layers, 
   PlusCircle, 
   Table, 
   Settings, 
-  FileText, 
   TrendingUp, 
-  Check, 
-  Info,
-  Calendar,
-  Sparkles,
-  Printer,
-  ChevronRight,
-  ChevronLeft,
   X,
-  FolderOpen
+  CheckCircle2
 } from "lucide-react";
 import { 
   getDirectoryHandle, 
@@ -57,6 +46,82 @@ export default function App() {
   
   // Selected intervention for printing/viewing
   const [selectedIntervention, setSelectedIntervention] = useState<Intervention | null>(null);
+
+  // Theme settings (persisted in local storage)
+  const [theme, setTheme] = useState<"light" | "dark">(
+    () => (localStorage.getItem("cniplc_theme") as "light" | "dark") || "light"
+  );
+
+  const isDark = theme === "dark";
+
+  // Discrete status toast notification state
+  const [toast, setToast] = useState<{ message: string; visible: boolean }>({
+    message: "",
+    visible: false
+  });
+
+  // Automatically hide toast notification after 4 seconds
+  useEffect(() => {
+    if (toast.visible) {
+      const timer = setTimeout(() => {
+        setToast((prev) => ({ ...prev, visible: false }));
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast.visible, toast.message]);
+
+  const showToastNotification = (msg: string) => {
+    setToast({
+      message: msg,
+      visible: true
+    });
+  };
+
+  const handleToggleTheme = (newTheme: "light" | "dark") => {
+    setTheme(newTheme);
+    localStorage.setItem("cniplc_theme", newTheme);
+  };
+
+  // Setup global keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const char = e.key.toLowerCase();
+      
+      // We look for modifier keys (Ctrl or Alt or Meta/Cmd)
+      const hasModifier = e.ctrlKey || e.metaKey || e.altKey;
+
+      if (hasModifier) {
+        if (char === "n") {
+          e.preventDefault();
+          setActiveTab("new");
+          showToastNotification("Raccourci activé : Saisie d'intervention (Alt+N / Ctrl+N)");
+        } else if (char === "b" || char === "d") {
+          e.preventDefault();
+          setActiveTab("dashboard");
+          showToastNotification("Raccourci activé : Tableau de Bord (Alt+B / Ctrl+B)");
+        } else if (char === "r" || char === "h") {
+          e.preventDefault();
+          setActiveTab("registry");
+          showToastNotification("Raccourci activé : Registre des Activités (Alt+R / Ctrl+R)");
+        } else if (char === "s" || char === "p") {
+          e.preventDefault();
+          setActiveTab("settings");
+          showToastNotification("Raccourci activé : Préférences (Alt+S / Ctrl+S)");
+        }
+      } else if (e.key === "Escape") {
+        if (selectedIntervention) {
+          e.preventDefault();
+          setSelectedIntervention(null);
+          showToastNotification("Aperçu de la fiche d'intervention fermé (Échap)");
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [selectedIntervention]);
 
   // Load directory handle and interventions on mount
   useEffect(() => {
@@ -150,6 +215,7 @@ export default function App() {
 
     const newList = [newInt, ...interventions];
     saveToLocalStorage(newList);
+    showToastNotification(`Nouvelle intervention (${newInt.refNumber}) créée et enregistrée avec succès au registre !`);
 
     const downloadName = `CNIPLC_Fiche_${newInt.refNumber.replace(/\s+/g, "_")}.json`;
     const dataStr = JSON.stringify(newInt, null, 2);
@@ -165,7 +231,6 @@ export default function App() {
     if (localDirHandle) {
       try {
         await writeJsonToDirectory(localDirHandle, downloadName, dataStr);
-        // Successful direct disk audit log
         console.log(`Automatic background save succeeded: ${downloadName} stored in user-selected folder.`);
       } catch (err: any) {
         console.error("Autosave to connected directory failed:", err);
@@ -229,6 +294,9 @@ export default function App() {
       return i;
     });
     saveToLocalStorage(newList);
+    const toggledItem = newList.find(item => item.id === id);
+    const label = toggledItem?.status === "termine" ? "Clôturée" : "En cours d'intervention";
+    showToastNotification(`Statut mis à jour : ${label} !`);
     // Sync active select preview
     if (selectedIntervention?.id === id) {
       const updated = newList.find(t => t.id === id);
@@ -252,6 +320,59 @@ export default function App() {
     linkElement.setAttribute('href', dataUri);
     linkElement.setAttribute('download', exportFileDefaultName);
     linkElement.click();
+  };
+
+  // Export database to standard CSV spreadsheet file (compatible with Excel, LibreOffice, Google Sheets)
+  const handleExportCSV = () => {
+    // Semicolon values is preferred in standard French Excel systems
+    const headers = [
+      "Référence",
+      "Date d'intervention",
+      "Technicien IT",
+      "Bénéficiaire d'État",
+      "Titre Bénéficiaire",
+      "Département / Direction",
+      "Type d'Équipement",
+      "Marque / Modèle",
+      "N° Inventaire",
+      "Durée (min)",
+      "Statut",
+      "Synthèse d'Intervention"
+    ];
+
+    const rows = interventions.map((item) => {
+      return [
+        item.refNumber,
+        new Date(item.date).toLocaleDateString('fr-FR'),
+        item.techName,
+        item.clientName,
+        item.clientTitle,
+        item.clientDepartment,
+        item.deviceType,
+        item.deviceBrand || "",
+        item.deviceInventory || "N/A",
+        item.durationMinutes.toString(),
+        item.status === "termine" ? "Terminée" : "En cours",
+        // Clean line breaks and escape quotes
+        item.professionalSummary.replace(/"/g, '""').replace(/\r?\n|\r/g, ' ')
+      ];
+    });
+
+    // Write CSV data with UTF-8 BOM so french accents display cleanly in Microsoft Excel
+    const csvContent = [
+      headers.join(";"),
+      ...rows.map(row => row.map(val => `"${val}"`).join(";"))
+    ].join("\r\n");
+
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', url);
+    linkElement.setAttribute('download', `CNIPLC_REGISTRE_CSV_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(linkElement);
+    linkElement.click();
+    document.body.removeChild(linkElement);
+    URL.revokeObjectURL(url);
   };
 
   // Import previously saved JSON files
@@ -290,7 +411,9 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col antialiased">
+    <div className={`min-h-screen flex flex-col antialiased transition-colors duration-200 ${
+      isDark ? "bg-slate-950 text-slate-100" : "bg-slate-50 text-slate-900"
+    }`}>
       {/* State Official Banner Header */}
       <header className="bg-slate-900 text-white shadow-md border-b-2 border-teal-500/80 no-print">
         <div className="max-w-7xl mx-auto px-4 py-4 md:py-5 flex flex-wrap items-center justify-between gap-4">
@@ -302,7 +425,6 @@ export default function App() {
                 className="h-12 w-12 object-contain rounded" 
                 referrerPolicy="no-referrer"
                 onError={(e) => {
-                  // If the image fails to load for any reason, hide default cross and show simple fallback circle (or text)
                   e.currentTarget.style.display = 'none';
                 }}
               />
@@ -333,19 +455,28 @@ export default function App() {
       </header>
 
       {/* Primary tab navigator */}
-      <nav className="bg-white border-b border-slate-200/80 shadow-sm no-print">
+      <nav className={`no-print border-b transition-colors duration-200 ${
+        isDark ? "bg-slate-900 border-slate-800 shadow-lg shadow-teal-500/5" : "bg-white border-slate-200/80 shadow-sm"
+      }`}>
         <div className="max-w-7xl mx-auto px-4 flex space-x-1 overflow-x-auto scrollbar-none py-1.5">
           <button
             id="nav-tab-dashboard"
             onClick={() => setActiveTab("dashboard")}
             className={`px-4 py-3 text-xs md:text-sm font-bold rounded-lg flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
               activeTab === "dashboard"
-                ? "bg-teal-50/80 text-teal-800 border-b-2 border-teal-600 shadow-sm"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                ? isDark
+                  ? "bg-slate-800 text-teal-400 border-b-2 border-teal-500 shadow-md"
+                  : "bg-teal-50/80 text-teal-800 border-b-2 border-teal-600 shadow-sm"
+                : isDark
+                  ? "text-slate-400 hover:text-slate-200 hover:bg-slate-800/80"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
             }`}
           >
             <TrendingUp className="w-4 h-4 text-teal-600" />
-            Tableau de Bord & Stats
+            <span>Tableau de Bord</span>
+            <kbd className={`ml-1 px-1 py-0.5 text-[9px] font-mono rounded font-bold hidden lg:inline-block ${
+              isDark ? "bg-slate-950 border border-slate-850 text-teal-400" : "bg-slate-100 border border-slate-200 text-slate-500"
+            }`}>Alt+B</kbd>
           </button>
 
           <button
@@ -353,12 +484,19 @@ export default function App() {
             onClick={() => setActiveTab("new")}
             className={`px-4 py-3 text-xs md:text-sm font-bold rounded-lg flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
               activeTab === "new"
-                ? "bg-teal-50/80 text-teal-800 border-b-2 border-teal-600 shadow-sm"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                ? isDark
+                  ? "bg-slate-800 text-teal-400 border-b-2 border-teal-500 shadow-md"
+                  : "bg-teal-50/80 text-teal-800 border-b-2 border-teal-600 shadow-sm"
+                : isDark
+                  ? "text-slate-400 hover:text-slate-200 hover:bg-slate-800/80"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
             }`}
           >
-            <PlusCircle className="w-4 h-4 text-teal-600 animate-bounce" />
-            Consigner une Intervention
+            <PlusCircle className="w-4 h-4 text-teal-600" />
+            <span>Consigner une Intervention</span>
+            <kbd className={`ml-1 px-1 py-0.5 text-[9px] font-mono rounded font-bold hidden lg:inline-block ${
+              isDark ? "bg-slate-950 border border-slate-850 text-teal-400" : "bg-slate-100 border border-slate-200 text-slate-500"
+            }`}>Alt+N</kbd>
           </button>
 
           <button
@@ -366,15 +504,24 @@ export default function App() {
             onClick={() => setActiveTab("registry")}
             className={`px-4 py-3 text-xs md:text-sm font-bold rounded-lg flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
               activeTab === "registry"
-                ? "bg-teal-50/80 text-teal-800 border-b-2 border-teal-600 shadow-sm"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                ? isDark
+                  ? "bg-slate-800 text-teal-400 border-b-2 border-teal-500 shadow-md"
+                  : "bg-teal-50/80 text-teal-800 border-b-2 border-teal-600 shadow-sm"
+                : isDark
+                  ? "text-slate-400 hover:text-slate-200 hover:bg-slate-800/80"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
             }`}
           >
             <Table className="w-4 h-4 text-teal-600" />
-            Registre & Fiches à Signer
-            <span className="bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-mono leading-none">
+            <span>Registre & Fiches</span>
+            <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono leading-none ${
+              isDark ? "bg-slate-750 text-slate-300" : "bg-slate-200 text-slate-750"
+            }`}>
               {interventions.length}
             </span>
+            <kbd className={`ml-1 px-1 py-0.5 text-[9px] font-mono rounded font-bold hidden lg:inline-block ${
+              isDark ? "bg-slate-950 border border-slate-850 text-teal-400" : "bg-slate-100 border border-slate-200 text-slate-500"
+            }`}>Alt+R</kbd>
           </button>
 
           <button
@@ -382,12 +529,19 @@ export default function App() {
             onClick={() => setActiveTab("settings")}
             className={`px-4 py-3 text-xs md:text-sm font-bold rounded-lg flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap ${
               activeTab === "settings"
-                ? "bg-teal-50/80 text-teal-800 border-b-2 border-teal-600 shadow-sm"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                ? isDark
+                  ? "bg-slate-800 text-teal-400 border-b-2 border-teal-500 shadow-md"
+                  : "bg-teal-50/80 text-teal-800 border-b-2 border-teal-600 shadow-sm"
+                : isDark
+                  ? "text-slate-400 hover:text-slate-200 hover:bg-slate-800/80"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
             }`}
           >
             <Settings className="w-4 h-4 text-teal-600" />
-            Préférences & Import/Export
+            <span>Préférences</span>
+            <kbd className={`ml-1 px-1 py-0.5 text-[9px] font-mono rounded font-bold hidden lg:inline-block ${
+              isDark ? "bg-slate-950 border border-slate-850 text-teal-400" : "bg-slate-100 border border-slate-200 text-slate-500"
+            }`}>Alt+S</kbd>
           </button>
         </div>
       </nav>
@@ -401,11 +555,15 @@ export default function App() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -15 }}
               transition={{ duration: 0.3 }}
-              className="mb-8 border border-teal-150 rounded-2xl bg-teal-50/10 p-4 relative shadow-sm max-w-4xl mx-auto"
+              className={`mb-8 border rounded-2xl p-4 relative shadow-sm max-w-4xl mx-auto ${
+                isDark ? "bg-slate-900/40 border-slate-800" : "bg-teal-50/10 border-teal-150"
+              }`}
             >
               <button
                 onClick={() => setSelectedIntervention(null)}
-                className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 bg-white border border-slate-200 rounded-full cursor-pointer hover:shadow transition-all z-10"
+                className={`absolute top-4 right-4 p-1 rounded-full cursor-pointer hover:shadow transition-all z-10 border ${
+                  isDark ? "bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200" : "bg-white border-slate-200 text-slate-405 hover:text-slate-600"
+                }`}
                 title="Masquer l'aperçu"
               >
                 <X className="w-4 h-4" />
@@ -428,7 +586,7 @@ export default function App() {
               exit={{ opacity: 0, y: -12 }}
               transition={{ duration: 0.2 }}
             >
-              <StatsDashboard interventions={interventions} />
+              <StatsDashboard interventions={interventions} theme={theme} />
             </motion.div>
           )}
 
@@ -443,6 +601,8 @@ export default function App() {
               <NewInterventionForm 
                 onSave={handleCreateIntervention} 
                 techProfile={techProfile}
+                theme={theme}
+                interventions={interventions}
               />
             </motion.div>
           )}
@@ -460,6 +620,7 @@ export default function App() {
                 onSelect={setSelectedIntervention}
                 onDelete={handleDeleteIntervention}
                 onToggleStatus={handleToggleStatus}
+                theme={theme}
               />
             </motion.div>
           )}
@@ -476,17 +637,51 @@ export default function App() {
                 techProfile={techProfile}
                 onSaveProfile={handleSaveProfile}
                 onExportData={handleExportData}
+                onExportCSV={handleExportCSV}
                 onImportData={handleImportData}
                 onResetFactory={handleResetFactory}
                 onClearData={handleClearData}
                 localDirName={localDirName}
                 onConnectDirectory={handleConnectDirectory}
                 onDisconnectDirectory={handleDisconnectDirectory}
+                theme={theme}
+                onToggleTheme={handleToggleTheme}
               />
             </motion.div>
           )}
         </AnimatePresence>
       </main>
+      
+      {/* Dynamic Toast Status Notification Alert */}
+      <AnimatePresence>
+        {toast.visible && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 30, scale: 0.95 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-lg border backdrop-blur-md text-xs font-semibold no-print max-w-sm w-[calc(100%-2rem)]"
+            style={{
+              backgroundColor: isDark ? "rgba(15, 23, 42, 0.9)" : "rgba(255, 255, 255, 0.92)",
+              borderColor: isDark ? "rgba(20, 184, 166, 0.35)" : "rgba(20, 184, 166, 0.25)",
+              color: isDark ? "#2dd4bf" : "#0f766e"
+            }}
+          >
+            <CheckCircle2 className="w-4.5 h-4.5 shrink-0 text-teal-500" />
+            <div className="flex-1 font-sans">
+              {toast.message}
+            </div>
+            <button
+              onClick={() => setToast((prev) => ({ ...prev, visible: false }))}
+              className={`p-0.5 rounded-full hover:bg-slate-200/20 transition-colors cursor-pointer ${
+                isDark ? "text-slate-400 hover:text-white" : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Background full-size Printable Page Container exclusively visible when printing */}
       {selectedIntervention ? (
@@ -506,7 +701,7 @@ export default function App() {
       <footer className="bg-slate-900 border-t border-slate-800 text-slate-500 py-6 text-center text-xs mt-12 no-print">
         <div className="max-w-7xl mx-auto px-4 space-y-1">
           <p>© {new Date().getFullYear()} - Registre d'Archives de Prestations et Service Fait d'État.</p>
-          <p className="text-[10px] text-slate-600 font-mono">
+          <p className="text-[10px] text-slate-650 font-mono">
             Développé pour les services informatiques du CNIPLC • Soumis aux règles de traçabilité administrative d'État.
           </p>
         </div>

@@ -28,6 +28,7 @@ export interface Intervention {
   status: "termine" | "en_cours";
   signatureDate?: string;
   durationMinutes: number; // Durée de l'intervention
+  quickNotes?: string; // Notes rapides optionnelles (détails contextuels / observations)
   createdAt: string;
 }
 

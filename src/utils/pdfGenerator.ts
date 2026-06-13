@@ -9,7 +9,9 @@ import { Intervention } from "../types";
 // Helper to fetch and convert image to base64
 const getBase64ImageFromUrl = async (imageUrl: string): Promise<string | null> => {
   try {
-    const res = await fetch(imageUrl);
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const absoluteUrl = imageUrl.startsWith("/") ? origin + imageUrl : imageUrl;
+    const res = await fetch(absoluteUrl);
     if (!res.ok) return null;
     const blob = await res.blob();
     return new Promise((resolve) => {
@@ -214,6 +216,21 @@ export async function generateAndDownloadPDF(intervention: Intervention): Promis
 
   currentY += (wrappedSummary.length * 4.2) + 5;
 
+  // Render quickNotes if present
+  if (intervention.quickNotes) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(15, 23, 42); 
+    doc.text("Notes rapides / Observations complémentaires :", 15, currentY);
+    currentY += 4.5;
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(7.5);
+    doc.setTextColor(71, 85, 105); // Slate-600
+    const wrappedQuickNotes = doc.splitTextToSize(intervention.quickNotes, 180);
+    doc.text(wrappedQuickNotes, 15, currentY);
+    currentY += (wrappedQuickNotes.length * 3.8) + 5;
+  }
+
   // 6. ACTION NOMENCLATURE TABLE
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8.5);
@@ -321,7 +338,7 @@ export async function generateAndDownloadPDF(intervention: Intervention): Promis
   doc.text("CNIPLC Service de Maintenance", 18, currentY + 8);
   doc.line(15, currentY + 16, 101, currentY + 16);
   doc.text(`Date : ${new Date().toLocaleDateString('fr-FR')}`, 17, currentY + 20);
-  doc.text("Tampon & Signature", 99, currentY + 20, { align: "right" });
+  doc.text("Signature", 99, currentY + 20, { align: "right" });
 
   // Right Block
   doc.rect(109, currentY, 86, 22);
