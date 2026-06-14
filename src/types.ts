@@ -29,7 +29,14 @@ export interface Intervention {
   signatureDate?: string;
   durationMinutes: number; // Durée de l'intervention
   quickNotes?: string; // Notes rapides optionnelles (détails contextuels / observations)
+  photos?: DevicePhoto[]; // Photos d'intervention avec descriptions
   createdAt: string;
+}
+
+export interface DevicePhoto {
+  id: string;
+  url: string; // Base64 data URI structure for offline persistence
+  taskDescription: string; // Action / Tâche accomplie liée à cette image
 }
 
 export interface TechProfile {

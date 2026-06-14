@@ -26,7 +26,7 @@ import {
   deleteDirectoryHandle, 
   writeJsonToDirectory 
 } from "./utils/localDiskStorage";
-import { generateAndDownloadPDF } from "./utils/pdfGenerator";
+import { generateAndDownloadPDF, generateAndDownloadPhotosPDF } from "./utils/pdfGenerator";
 
 export default function App() {
   // Stored states
@@ -85,6 +85,7 @@ export default function App() {
   // Setup global keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (!e || !e.key) return;
       const char = e.key.toLowerCase();
       
       // We look for modifier keys (Ctrl or Alt or Meta/Cmd)
@@ -223,6 +224,9 @@ export default function App() {
     // 1. Immediately compile and trigger PDF download as requested
     try {
       await generateAndDownloadPDF(newInt);
+      if (newInt.photos && newInt.photos.length > 0) {
+        await generateAndDownloadPhotosPDF(newInt);
+      }
     } catch (e) {
       console.error("Auto PDF generation failed:", e);
     }

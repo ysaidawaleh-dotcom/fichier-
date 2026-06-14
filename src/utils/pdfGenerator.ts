@@ -358,3 +358,381 @@ export async function generateAndDownloadPDF(intervention: Intervention): Promis
   const pdfFileName = `CNIPLC_Fiche_${intervention.refNumber.replace(/\s+/g, "_")}.pdf`;
   doc.save(pdfFileName);
 }
+
+export async function generateAndDownloadPhotosPDF(intervention: Intervention): Promise<void> {
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4"
+  });
+
+  // Get official base64 logo
+  const imgData = await getBase64ImageFromUrl("/api/logo");
+
+  const currentY = 15;
+
+  // Header Section (identical to main PDF for administrative authenticity)
+  if (imgData) {
+    doc.addImage(imgData, "JPEG", 15, currentY, 20, 20);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text("RÉPUBLIQUE DE DJIBOUTI", 38, currentY + 3);
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(15, 23, 42);
+    const headerLines = doc.splitTextToSize("COMMISSION NATIONALE INDÉPENDANTE POUR LA PRÉVENTION ET LA LUTTE CONTRE LA CORRUPTION", 100);
+    doc.text(headerLines, 38, currentY + 7);
+    
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(197, 160, 67);
+    doc.text("CNIPLC - SERVICES TECHNIQUES DE L'INFORMATIQUE", 38, currentY + 16);
+  } else {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(15, 23, 42);
+    doc.text("RÉPUBLIQUE DE DJIBOUTI", 15, currentY + 3);
+    doc.setFontSize(8);
+    const headerLines = doc.splitTextToSize("COMMISSION NATIONALE INDÉPENDANTE POUR LA PRÉVENTION ET LA LUTTE CONTRE LA CORRUPTION", 120);
+    doc.text(headerLines, 15, currentY + 8);
+    doc.setFontSize(8);
+    doc.setTextColor(197, 160, 67);
+    doc.text("CNIPLC - SERVICES TECHNIQUES DE L'INFORMATIQUE", 15, currentY + 18);
+  }
+
+  // Metadata block (Right side)
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(15, 23, 42);
+  doc.text(`REF : ${intervention.refNumber}`, 195, currentY + 4, { align: "right" });
+  
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text(`Photos : ${intervention.photos?.length || 0} clichés`, 195, currentY + 9, { align: "right" });
+  doc.text(`Date : ${new Date(intervention.date).toLocaleDateString('fr-FR')}`, 195, currentY + 14, { align: "right" });
+
+  doc.setDrawColor(197, 160, 67);
+  doc.setLineWidth(0.8);
+  doc.line(15, currentY + 23, 195, currentY + 23);
+
+  // Photo Section Core Title
+  const titleY = currentY + 32;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(13);
+  doc.setTextColor(15, 23, 42);
+  doc.text("ALBUM PHOTO ET PREUVES MATÉRIELLES D'INTERVENTION", 105, titleY, { align: "center" });
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(197, 160, 67);
+  doc.text("ANNEXE TECHNIQUE DE CLÔTURE DE PRESTATION", 105, titleY + 4.5, { align: "center" });
+
+  const photos = intervention.photos || [];
+  const count = photos.length;
+
+  if (count === 0) {
+    // Empty state fallback
+    doc.setDrawColor(226, 232, 240);
+    doc.rect(15, titleY + 15, 180, 50);
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(10);
+    doc.setTextColor(148, 163, 184);
+    doc.text("Aucune photo consignée pour cette intervention.", 105, titleY + 42, { align: "center" });
+  } else {
+    // Smart and Clear Grid Layout rendering beautifully inside a single A4 page
+    const startPhotoY = titleY + 12;
+
+    if (count === 1) {
+      // 1 Giant Block / Cube
+      const photo = photos[0];
+      const imgWidth = 150;
+      const imgHeight = 110;
+      const startX = 30;
+      const startY = startPhotoY + 10;
+
+      try {
+        doc.addImage(photo.url, "JPEG", startX, startY, imgWidth, imgHeight);
+      } catch {
+        doc.setFillColor(240, 240, 240);
+        doc.rect(startX, startY, imgWidth, imgHeight, "F");
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(9);
+        doc.setTextColor(150, 150, 150);
+        doc.text("[Image non valide ou format incompatible]", startX + 45, startY + 55);
+      }
+
+      // Elegant caption border box
+      doc.setFillColor(253, 250, 242);
+      doc.rect(startX, startY + imgHeight, imgWidth, 18, "F");
+      doc.setDrawColor(242, 223, 174);
+      doc.setLineWidth(0.3);
+      doc.rect(startX, startY + imgHeight, imgWidth, 18, "D");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(147, 113, 35);
+      doc.text("CLICHÉ N°1 :", startX + 5, startY + imgHeight + 11);
+
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(8.5);
+      doc.setTextColor(60, 60, 60);
+      const wrappedDesc = doc.splitTextToSize(photo.taskDescription || "Aucun commentaire technique consigné.", imgWidth - 32);
+      doc.text(wrappedDesc, startX + 27, startY + imgHeight + 10.5);
+
+    } else if (count === 2) {
+      // 2 Side by side elegant blocks (cubes)
+      const imgWidth = 84;
+      const imgHeight = 84;
+      const startY = startPhotoY + 20;
+
+      photos.forEach((photo, idx) => {
+        const startX = idx === 0 ? 15 : 111;
+        try {
+          doc.addImage(photo.url, "JPEG", startX, startY, imgWidth, imgHeight);
+        } catch {
+          doc.setFillColor(240, 240, 240);
+          doc.rect(startX, startY, imgWidth, imgHeight, "F");
+        }
+
+        // Caption Box
+        doc.setFillColor(253, 250, 242);
+        doc.rect(startX, startY + imgHeight, imgWidth, 18, "F");
+        doc.setDrawColor(242, 223, 174);
+        doc.rect(startX, startY + imgHeight, imgWidth, 18, "D");
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(8);
+        doc.setTextColor(147, 113, 35);
+        doc.text(`CLICHÉ N°${idx + 1} :`, startX + 4, startY + imgHeight + 11);
+
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(8);
+        doc.setTextColor(60, 60, 60);
+        const wrappedDesc = doc.splitTextToSize(photo.taskDescription || "Aucune consigne.", imgWidth - 24);
+        doc.text(wrappedDesc, startX + 22, startY + imgHeight + 10.5);
+      });
+
+    } else if (count === 3) {
+      // Asymmetric Smart Layout: 1 primary block on top, 2 side-by-side blocks below
+      // Top Block
+      const primaryPhoto = photos[0];
+      const primaryWidth = 150;
+      const primaryHeight = 85;
+      const primaryX = 30;
+      const primaryY = startPhotoY + 5;
+
+      try {
+        doc.addImage(primaryPhoto.url, "JPEG", primaryX, primaryY, primaryWidth, primaryHeight);
+      } catch {
+        doc.setFillColor(240, 240, 240);
+        doc.rect(primaryX, primaryY, primaryWidth, primaryHeight, "F");
+      }
+
+      doc.setFillColor(253, 250, 242);
+      doc.rect(primaryX, primaryY + primaryHeight, primaryWidth, 14, "F");
+      doc.setDrawColor(242, 223, 174);
+      doc.rect(primaryX, primaryY + primaryHeight, primaryWidth, 14, "D");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.setTextColor(147, 113, 35);
+      doc.text("CLICHÉ MAJEUR (N°1) :", primaryX + 4, primaryY + primaryHeight + 9);
+
+      doc.setFont("helvetica", "italic");
+      doc.setFontSize(8);
+      doc.setTextColor(60, 60, 60);
+      const wrappedDescPrimary = doc.splitTextToSize(primaryPhoto.taskDescription || "Preuve technique principale.", primaryWidth - 40);
+      doc.text(wrappedDescPrimary, primaryX + 37, primaryY + primaryHeight + 8.5);
+
+      // Remaining 2 below side by side
+      const remainingPhotos = photos.slice(1, 3);
+      const secWidth = 84;
+      const secHeight = 58;
+      const secY = primaryY + primaryHeight + 23;
+
+      remainingPhotos.forEach((photo, idx) => {
+        const startX = idx === 0 ? 15 : 111;
+        try {
+          doc.addImage(photo.url, "JPEG", startX, secY, secWidth, secHeight);
+        } catch {
+          doc.setFillColor(240, 240, 240);
+          doc.rect(startX, secY, secWidth, secHeight, "F");
+        }
+
+        doc.setFillColor(253, 250, 242);
+        doc.rect(startX, secY + secHeight, secWidth, 13, "F");
+        doc.setDrawColor(242, 223, 174);
+        doc.rect(startX, secY + secHeight, secWidth, 13, "D");
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7.5);
+        doc.setTextColor(147, 113, 35);
+        doc.text(`CLICHÉ N°${idx + 2} :`, startX + 4, secY + secHeight + 8);
+
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(7.5);
+        doc.setTextColor(60, 60, 60);
+        const wrappedDesc = doc.splitTextToSize(photo.taskDescription || "Aucune observation.", secWidth - 22);
+        doc.text(wrappedDesc, startX + 20, secY + secHeight + 7.5);
+      });
+
+    } else if (count === 4) {
+      // Perfect 2x2 grid (Four smart block cubes)
+      const imgWidth = 84;
+      const imgHeight = 65;
+      const rowGap = 12;
+
+      photos.forEach((photo, idx) => {
+        const col = idx % 2;
+        const row = Math.floor(idx / 2);
+
+        const startX = col === 0 ? 15 : 111;
+        const startY = startPhotoY + 10 + row * (imgHeight + rowGap + 12);
+
+        try {
+          doc.addImage(photo.url, "JPEG", startX, startY, imgWidth, imgHeight);
+        } catch {
+          doc.setFillColor(240, 240, 240);
+          doc.rect(startX, startY, imgWidth, imgHeight, "F");
+        }
+
+        doc.setFillColor(253, 250, 242);
+        doc.rect(startX, startY + imgHeight, imgWidth, 13, "F");
+        doc.setDrawColor(242, 223, 174);
+        doc.rect(startX, startY + imgHeight, imgWidth, 13, "D");
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7.5);
+        doc.setTextColor(147, 113, 35);
+        doc.text(`CLICHÉ N°${idx + 1} :`, startX + 4, startY + imgHeight + 8);
+
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(7.5);
+        doc.setTextColor(60, 60, 60);
+        const wrappedDesc = doc.splitTextToSize(photo.taskDescription || "Aucune observation rédigée.", imgWidth - 22);
+        doc.text(wrappedDesc, startX + 20, startY + imgHeight + 8);
+      });
+
+    } else if (count === 5) {
+      // 5 photos - "خمس صور على شكل كولاج"
+      // Smart mosaic collage: ROW 1 has 2 larger horizontal blocks; ROW 2 has 3 beautifully aligned cubes!
+      // Row 1 (2 blocks of Width 86mm, Height 64mm)
+      const row1Width = 86;
+      const row1Height = 64;
+      const row1Y = startPhotoY + 5;
+
+      for (let i = 0; i < 2; i++) {
+        const photo = photos[i];
+        const startX = i === 0 ? 15 : 109;
+
+        try {
+          doc.addImage(photo.url, "JPEG", startX, row1Y, row1Width, row1Height);
+        } catch {
+          doc.setFillColor(240, 240, 240);
+          doc.rect(startX, row1Y, row1Width, row1Height, "F");
+        }
+
+        // Caption Bar
+        doc.setFillColor(253, 250, 242);
+        doc.rect(startX, row1Y + row1Height, row1Width, 13, "F");
+        doc.setDrawColor(242, 223, 174);
+        doc.rect(startX, row1Y + row1Height, row1Width, 13, "D");
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7.5);
+        doc.setTextColor(147, 113, 35);
+        doc.text(`CLICHÉ N°${i + 1} :`, startX + 4, row1Y + row1Height + 8);
+
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(7.5);
+        doc.setTextColor(60, 60, 60);
+        const wrappedDesc = doc.splitTextToSize(photo.taskDescription || "Opération technique constatée.", row1Width - 22);
+        doc.text(wrappedDesc, startX + 20, row1Y + row1Height + 8);
+      }
+
+      // Row 2 (3 elegant small blocks / cubes of Width 55mm, Height 52mm)
+      const row2Width = 55;
+      const row2Height = 52;
+      const row2Y = row1Y + row1Height + 25; // 25mm spacing to include row 1 captions + vertical gap
+
+      for (let i = 2; i < 5; i++) {
+        const photo = photos[i];
+        // Distribute nicely across margins 15mm up to 195mm (printable width of 180mm)
+        // Col 1: X = 15mm. Col 2: X = 77.5mm. Col 3: X = 140mm.
+        let startX = 15;
+        if (i === 3) startX = 77.5;
+        if (i === 4) startX = 140;
+
+        try {
+          doc.addImage(photo.url, "JPEG", startX, row2Y, row2Width, row2Height);
+        } catch {
+          doc.setFillColor(240, 240, 240);
+          doc.rect(startX, row2Y, row2Width, row2Height, "F");
+        }
+
+        // Caption Bar
+        doc.setFillColor(253, 250, 242);
+        doc.rect(startX, row2Y + row2Height, row2Width, 13, "F");
+        doc.setDrawColor(242, 223, 174);
+        doc.rect(startX, row2Y + row2Height, row2Width, 13, "D");
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7);
+        doc.setTextColor(147, 113, 35);
+        doc.text(`CLICHÉ N°${i + 1} :`, startX + 3, row2Y + row2Height + 8);
+
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(6.5);
+        doc.setTextColor(60, 60, 60);
+        const wrappedDesc = doc.splitTextToSize(photo.taskDescription || "Acte achevé.", row2Width - 16);
+        doc.text(wrappedDesc, startX + 17, row2Y + row2Height + 7.5);
+      }
+
+    } else {
+      // 6 photos - Perfectly ordered 2x3 block grid (6 cubes)
+      const imgWidth = 84;
+      const imgHeight = 48;
+      const rowGap = 13;
+
+      photos.forEach((photo, idx) => {
+        if (idx >= 6) return; // strict cap at 6 photos
+        const col = idx % 2;
+        const row = Math.floor(idx / 2);
+
+        const startX = col === 0 ? 15 : 111;
+        const startY = startPhotoY + 5 + row * (imgHeight + rowGap + 12);
+
+        try {
+          doc.addImage(photo.url, "JPEG", startX, startY, imgWidth, imgHeight);
+        } catch {
+          doc.setFillColor(240, 240, 240);
+          doc.rect(startX, startY, imgWidth, imgHeight, "F");
+        }
+
+        // Caption Box
+        doc.setFillColor(253, 250, 242);
+        doc.rect(startX, startY + imgHeight, imgWidth, 12, "F");
+        doc.setDrawColor(242, 223, 174);
+        doc.rect(startX, startY + imgHeight, imgWidth, 12, "D");
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7.5);
+        doc.setTextColor(147, 113, 35);
+        doc.text(`CLICHÉ N°${idx + 1} :`, startX + 4, startY + imgHeight + 7.5);
+
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(7);
+        doc.setTextColor(60, 60, 60);
+        const wrappedDesc = doc.splitTextToSize(photo.taskDescription || "Observation technique.", imgWidth - 22);
+        doc.text(wrappedDesc, startX + 20, startY + imgHeight + 7.5);
+      });
+    }
+  }
+
+  // Save the Photos PDF
+  const photosPdfFileName = `CNIPLC_Fiche_Photos_${intervention.refNumber.replace(/\s+/g, "_")}.pdf`;
+  doc.save(photosPdfFileName);
+}

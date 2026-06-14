@@ -6,7 +6,8 @@
 import React, { useState } from "react";
 import { Intervention } from "../types";
 import { Printer, Calendar, User, UserCheck, Shield, Award, Layers, Download, Sparkles } from "lucide-react";
-import { generateAndDownloadPDF } from "../utils/pdfGenerator";
+import { generateAndDownloadPDF, generateAndDownloadPhotosPDF } from "../utils/pdfGenerator";
+import PhotoCollage from "./PhotoCollage";
 
 interface ProfessionalFicheProps {
   intervention: Intervention;
@@ -19,7 +20,13 @@ export default function ProfessionalFiche({ intervention, onPrint }: Professiona
   const handleDownloadPDF = async () => {
     setIsPdfLoading(true);
     try {
+      // 1. Generate and download high-quality text-only administrative fiche
       await generateAndDownloadPDF(intervention);
+      
+      // 2. If photos exist, automatically generate and download the separate, standalone, pixel-perfect photo album PDF
+      if (intervention.photos && intervention.photos.length > 0) {
+        await generateAndDownloadPhotosPDF(intervention);
+      }
     } catch (err) {
       console.error("PDF generation failed:", err);
       alert("Une erreur est survenue lors de la compilation du PDF officiel.");
@@ -225,6 +232,13 @@ export default function ProfessionalFiche({ intervention, onPrint }: Professiona
             </tbody>
           </table>
         </div>
+
+        {/* Dynamic Photo board Collage */}
+        {intervention.photos && intervention.photos.length > 0 && (
+          <div className="my-6 page-break-inside-avoid">
+            <PhotoCollage photos={intervention.photos} theme="light" />
+          </div>
+        )}
 
         {/* Commitment and legal declaration */}
         <div className="my-6 bg-slate-50/80 p-3 rounded-lg border border-slate-200/60 text-[11px] text-slate-500 text-justify print:bg-transparent print:border print:border-slate-300 print:text-[10px]/normal">
